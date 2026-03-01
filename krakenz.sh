@@ -49,7 +49,7 @@ update_clock_image() {
 		-annotate +0-70 "$(date +%H)" \
 		-pointsize 150 \
 		-annotate +0+70 "$(date +%M)" "${IMG_PATH}"
-	set_lcd_mode "static" "/tmp/time.png"
+	set_lcd_mode "static" "${IMG_PATH}"
 }
 
 update_sensors_image() {
@@ -73,7 +73,7 @@ update_sensors_image() {
 		-annotate +0+110  "GPUHot:${data[4]}" \
 		-pointsize 20 \
 		-annotate +0+135 "PSU12VR:${data[5]}W" "${IMG_PATH}"
-	set_lcd_mode "static" "/tmp/time.png"
+	set_lcd_mode "static" "${IMG_PATH}"
 }
 
 refresh_display() {
