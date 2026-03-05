@@ -38,7 +38,6 @@ get_sensor_data() {
 		."amdgpu-pci-2800"."junction"."temp2_input", 
 		."corsairpsu-hid-3-d"."power +12v"."power2_input"
 	)*10|round/10'
-		
 }
 
 update_clock_image() {
