@@ -121,8 +121,10 @@ _update_sensors_image() {
 	readarray -t data < <(get_sensor_data)
 
 	# Create an associative array to pair keys with sensor values.
+	# Format sensor data with printf and store the formatted values
+	# into the array.
 	for item in cput gpu{e,m,j,c,p,f} powr liqt pump dim{0..3}; do
-		keyval_array[$item]=${data[i]}
+		printf -v keyval_array["$item"] '%s' "${data[i]}"
 		((i++))
 	done
 
