@@ -42,7 +42,6 @@ cleanup() {
 
 print_usage() {
 	cat <<-EOF
-		Wrong input! Available flags:
 		-b brightness:0-100%
 		-l liquid lcd mode
 		-g gif lcd mode
@@ -54,6 +53,7 @@ print_usage() {
 		-m monitor mode (add more "-m" flags to switch display)
 		-d load default profile
 		-p load user profile
+		-h print usage
 	EOF
 }
 
@@ -186,7 +186,7 @@ update_sensors_image_ddr() {
 
 update_sensors_image_gpu() {
 	_update_sensors_image \
-		"GPU"      "gpuc" "MHz" \
+		"GPU MHz"  "gpuc" "" \
 		"Edge"     "gpue" "$CELSIUS" \
 		"PPT"      "gpup" "W" \
 		"Junction" "gpuj" "$CELSIUS"
@@ -218,17 +218,16 @@ refresh_display() {
 	done
 }
 
-init
-
-if ! (return 2>/dev/null); then
+_main() {
 
 	trap cleanup EXIT
 
-	[[ -z $GIF ]] && echo "GIF not set!" && exit 1
+	[[ -z $GIF ]] && echo "GIF not set!" && return 1
 
-	liquidctl initialize all > /dev/null 2>&1
+	liquidctl initialize all &>/dev/null
 
-	while getopts "b:lgs:c:tmdp" flag; do
+	local OPTARG OPTIND flag
+	while getopts "b:lgs:c:tmdph" flag; do
 		case "${flag}" in
 			b) BRIGHTNESS="${OPTARG}" ;;
 			l) set_lcd_mode "liquid" ;;
@@ -241,7 +240,9 @@ if ! (return 2>/dev/null); then
 				set_lcd_mode "liquid"; break ;;
 			p) BRIGHTNESS=50  SPEED=(50)
 				set_lcd_mode "gif" "${GIF}"; break ;;
-			*) print_usage; exit 0 ;;
+			h) print_usage; return 0 ;;
+			*) echo "Wrong input! Available flags:" >&2;
+				print_usage >&2; return 2 ;;
 		esac
 	done
 
@@ -251,7 +252,7 @@ if ! (return 2>/dev/null); then
 
 	[[ -n $CLOCK ]] && refresh_display "update_clock_image" "30"
 
-	[[ -z $MON ]] && exit 0
+	[[ -z $MON ]] && return 0
 
 	case $MON in
 		1) refresh_display "update_sensors_image"     ".5" ;;
@@ -260,4 +261,10 @@ if ! (return 2>/dev/null); then
 		4) refresh_display "update_sensors_image_gpu" ".5" ;;
 		*) cycle_display ".5" ;;
 	esac
+}
+
+init
+
+if ! (return 2>/dev/null); then
+	_main "$@"
 fi
