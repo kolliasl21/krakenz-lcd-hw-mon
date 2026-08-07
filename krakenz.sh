@@ -15,6 +15,10 @@ LIQUID_COOLER_NAME="NZXT"
 CELSIUS=$'\xe2\x84\x83'
 declare -a SPEED
 declare -A DEVICES
+JQ_READ=
+JQ_WRITE=
+
+enable sleep
 
 init() {
 	local i=0 item
@@ -32,12 +36,17 @@ init() {
 		DEVICES[$item]=${data[i]}
 		((i++))
 	done
+
+	_init_coproc_jq
 }
 
 cleanup() {
 	[[ -f "${IMG_PATH}" ]] && rm "${IMG_PATH}"
+	enable -n sleep
+	[[ -n $JQ_PID ]] && kill -15 "$JQ_PID"
 	unset FONT GIF SPEED BRIGHTNESS IMG_PATH CLOCK MON \
-		IMG_RES LIQUID_COOLER_NAME CELSIUS DEVICES
+		IMG_RES LIQUID_COOLER_NAME CELSIUS DEVICES \
+		JQ_READ JQ_WRITE
 }
 
 print_usage() {
@@ -70,12 +79,13 @@ _set_pump_speed() (
 	liquidctl --match "${LIQUID_COOLER_NAME}" set pump speed ${SPEED[*]}
 )
 
-get_sensor_data() {
+_init_coproc_jq() {
 	# Replace with your own sensors. Don't copy these.
 	# If you have issues with devices changing names, add them to init().
 	# Start with a few simple sensors, add more later.
 	# Pass the DEVICES array values into jq using --arg.
-	jq \
+	coproc JQ {
+		jq --unbuffered \
 		--arg psu  "${DEVICES[psu]}" \
 		--arg z53  "${DEVICES[z53]}" \
 		--arg dim0 "${DEVICES[dim0]}" \
@@ -97,7 +107,21 @@ get_sensor_data() {
 		.[$dim1]."temp1"."temp1_input",
 		.[$dim2]."temp1"."temp1_input",
 		.[$dim3]."temp1"."temp1_input"
-		)*10|round/10' <(sensors -j)
+		)*10|round/10'
+	}
+
+	exec {JQ_READ}>&"${JQ[0]}"
+	exec {JQ_WRITE}>&"${JQ[1]}"
+}
+
+get_sensor_data() {
+	sensors -j >&"$JQ_WRITE"
+	local i line
+	# Read sensor data from file descriptor.
+	for ((i=0; i<14; i++)); do
+		read -r -u "$JQ_READ" line
+		echo "$line"
+	done
 }
 
 update_clock_image() {
