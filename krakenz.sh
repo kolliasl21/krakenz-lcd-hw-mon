@@ -37,7 +37,7 @@ init() {
 		((i++))
 	done
 
-	_init_coproc_jq
+	[[ -z $JQ_PID ]] && _init_coproc_jq
 }
 
 cleanup() {
@@ -262,7 +262,7 @@ _main() {
 			m) ((MON++)) ;;
 			d) BRIGHTNESS=50 SPEED=(25 40 30 60 35 80 40 100)
 				set_lcd_mode "liquid"; break ;;
-			p) BRIGHTNESS=50  SPEED=(50)
+			p) BRIGHTNESS=50 SPEED=(50)
 				set_lcd_mode "gif" "${GIF}"; break ;;
 			h) print_usage; return 0 ;;
 			*) echo "Wrong input! Available flags:" >&2;
