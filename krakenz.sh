@@ -126,7 +126,8 @@ get_sensor_data() {
 
 update_clock_image() {
 	local strtime
-	strtime="$(date +%H:%M)"
+	printf -v strtime '%(%H:%M)T'
+
 	magick 	-size "${IMG_RES}" gradient:black-black \
 		-font "${FONT}" \
 		-tile gradient:blue-magenta \
@@ -141,7 +142,7 @@ update_clock_image() {
 _update_sensors_image() {
 	declare -a data
 	declare -A keyval_array
-	local i=0 item
+	local i=0 item strtime
 	readarray -t data < <(get_sensor_data)
 
 	# Create an associative array to pair keys with sensor values.
@@ -152,12 +153,14 @@ _update_sensors_image() {
 		((i++))
 	done
 
+	printf -v strtime '%(%H:%M)T'
+
 	magick  -size "${IMG_RES}" gradient:black-black \
 		-font "${FONT}" \
 		-tile gradient:blue-magenta \
 		-gravity center \
 		-pointsize 80 \
-		-annotate +0-100 "$(date +%H:%M)" \
+		-annotate +0-100 "$strtime" \
 		-pointsize 30 \
 		-annotate +0+135 "${keyval_array[pump]}rpm" \
 		-tile gradient:red-yellow \
