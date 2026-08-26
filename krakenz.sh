@@ -14,15 +14,16 @@ IMG_RES="320x320"
 LIQUID_COOLER_NAME="NZXT"
 CELSIUS=$'\xe2\x84\x83'
 declare -a SPEED
-declare -A DEVICES
+declare -A DEVICES=([gpu]="amdgpu-pci-2800" [cpu]="k10temp-pci-00c3")
 JQ_READ=
 JQ_WRITE=
 
 enable sleep
 
 init() {
-	local i=0 item
+	local item count
 	declare -a data
+	declare -A item_count item_count_copy items
 
 	# Get devices that don't have fixed names at startup, usually USB devices.
 	# Match the first part of the string to get the full device name.
@@ -32,10 +33,34 @@ init() {
 		select(startswith("jc42-i2c-9-"))
 		)|sort .[]' <(sensors -j))
 
-	for item in psu dim{0..3} z53; do
-		DEVICES[$item]=${data[i]}
-		((i++))
+	# Strip sensor names from right to left up to the last dash "-" and
+	# store them in a associative array paired with the sensor name as key.
+	for item in "${data[@]}"; do
+		items[$item]=${item%%-*}
+		 ((item_count[${item%%-*}]++))
+		 ((item_count_copy[${item%%-*}]++))
 	done
+
+	# Keep duplicate values by appending a suffix.
+	for item in "${!items[@]}"; do
+		[[ ${item_count[${item%%-*}]} -lt 2 ]] && continue
+		count=$((${item_count_copy[${item%%-*}]}-1))
+		items[$item]="${items[$item]}_$count"
+		((item_count_copy[${item%%-*}]--))
+	done
+
+	# Store the values from "items" as keys in the DEVICES array and the
+	# sensor names as values.
+	for item in "${!items[@]}"; do
+		DEVICES[${items[$item]}]=$item
+	done
+
+	if [[ -n $DEBUG ]]; then
+		for item in "${!DEVICES[@]}"; do
+			echo "Key: $item, Value: ${DEVICES[$item]}"
+		done
+		echo "Number of devices: ${#DEVICES[@]}"
+	fi
 
 	[[ -z $JQ_PID ]] && _init_coproc_jq
 }
@@ -80,33 +105,34 @@ _set_pump_speed() (
 )
 
 _init_coproc_jq() {
-	# Replace with your own sensors. Don't copy these.
-	# If you have issues with devices changing names, add them to init().
-	# Start with a few simple sensors, add more later.
+	local key
+	declare -a args_list
+
+	# Build arguments list
 	# Pass the DEVICES array values into jq using --arg.
+	for key in "${!DEVICES[@]}"; do
+		args_list+=("--arg" "$key" "${DEVICES[$key]}")
+	done
+
+	# Replace with your own sensors. Don't copy these.
+	# Start with a few simple sensors, add more later.
 	coproc JQ {
-		jq --unbuffered \
-		--arg psu  "${DEVICES[psu]}" \
-		--arg z53  "${DEVICES[z53]}" \
-		--arg dim0 "${DEVICES[dim0]}" \
-		--arg dim1 "${DEVICES[dim1]}" \
-		--arg dim2 "${DEVICES[dim2]}" \
-		--arg dim3 "${DEVICES[dim3]}" \
+		jq --unbuffered "${args_list[@]}" \
 		'(
-		."k10temp-pci-00c3"."Tctl"."temp1_input",
-		."amdgpu-pci-2800"."edge"."temp1_input",
-		."amdgpu-pci-2800"."mem"."temp3_input",
-		."amdgpu-pci-2800"."junction"."temp2_input",
-		."amdgpu-pci-2800"."sclk"."freq1_input"/1000000,
-		."amdgpu-pci-2800"."PPT"."power1_average",
-		."amdgpu-pci-2800"."fan1"."fan1_input",
-		.[$psu]."power +12v"."power2_input",
+		.[$cpu]."Tctl"."temp1_input",
+		.[$gpu]."edge"."temp1_input",
+		.[$gpu]."mem"."temp3_input",
+		.[$gpu]."junction"."temp2_input",
+		.[$gpu]."sclk"."freq1_input"/1000000,
+		.[$gpu]."PPT"."power1_average",
+		.[$gpu]."fan1"."fan1_input",
+		.[$corsairpsu]."power +12v"."power2_input",
 		.[$z53]."Coolant temp"."temp1_input",
 		.[$z53]."Pump speed"."fan1_input",
-		.[$dim0]."temp1"."temp1_input",
-		.[$dim1]."temp1"."temp1_input",
-		.[$dim2]."temp1"."temp1_input",
-		.[$dim3]."temp1"."temp1_input"
+		.[$jc42_0]."temp1"."temp1_input",
+		.[$jc42_1]."temp1"."temp1_input",
+		.[$jc42_2]."temp1"."temp1_input",
+		.[$jc42_3]."temp1"."temp1_input"
 		)*10|round/10'
 	}
 
@@ -140,7 +166,7 @@ update_clock_image() {
 }
 
 _update_sensors_image() {
-	declare -a data
+	declare -a data sensor_order=(cput gpu{e,m,j,c,p,f} powr liqt pump dim{0..3})
 	declare -A keyval_array
 	local i=0 item strtime
 	readarray -t data < <(get_sensor_data)
@@ -148,9 +174,14 @@ _update_sensors_image() {
 	# Create an associative array to pair keys with sensor values.
 	# Format sensor data with printf and store the formatted values
 	# into the array.
-	for item in cput gpu{e,m,j,c,p,f} powr liqt pump dim{0..3}; do
+	for item in "${sensor_order[@]}"; do
 		printf -v keyval_array["$item"] '%s' "${data[i]}"
 		((i++))
+	done
+
+	# Format these sensors to one decimal place.
+	for item in cput liqt dim{0..3}; do
+		printf -v keyval_array["$item"] '%.1f' "${keyval_array[$item]}"
 	done
 
 	printf -v strtime '%(%H:%M)T'
